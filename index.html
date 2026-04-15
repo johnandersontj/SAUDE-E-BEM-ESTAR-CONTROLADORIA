@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HydroTrack — Hidratação</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💧</text></svg>">
+  <style>
+    /* ===== RESET ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue-50:#E6F1FB; --blue-100:#B5D4F4; --blue-200:#85B7EB;
+      --blue-400:#378ADD; --blue-600:#185FA5; --blue-800:#0C447C;
+      --teal-50:#E1F5EE; --teal-100:#9FE1CB; --teal-200:#5DCAA5;
+      --teal-400:#1D9E75; --teal-600:#0F6E56; --teal-800:#085041;
+      --amber-50:#FAEEDA; --amber-400:#BA7517; --amber-800:#633806;
+      --red-50:#FCEBEB; --red-400:#E24B4A; --red-800:#791F1F;
+      --gray-100:#D3D1C7; --gray-200:#B4B2A9; --gray-400:#888780;
+      --bg:#f4f7fb; --card:#ffffff; --text:#1a1a2e; --text-muted:#5F5E5A;
+      --border:rgba(0,0,0,0.08); --shadow:0 2px 12px rgba(0,0,0,0.07);
+      --radius:16px; --radius-sm:10px; --radius-xs:6px;
+      --tr:0.25s cubic-bezier(.4,0,.2,1);
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+      font-size: 15px; line-height: 1.5; -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ===== LAYOUT ===== */
+    #app { max-width: 430px; margin: 0 auto; min-height: 100vh; position: relative; }
+    .screen { display: none; flex-direction: column; min-height: 100vh; padding-bottom: 90px; }
+    .screen.active { display: flex; }
+    .scroll-area { overflow-y: auto; flex: 1; }
+
+    /* ===== LOADING ===== */
+    #loading-screen {
+      position: fixed; inset: 0; background: var(--bg); z-index: 9999;
+      display: flex; align-items: center; justify-content: center; transition: opacity .4s;
+    }
+    #loading-screen.hidden { opacity: 0; pointer-events: none; }
+    .ld-inner { text-align: center; }
+    .ld-icon { font-size: 52px; margin-bottom: 12px; animation: pulse 1.2s ease-in-out infinite; }
+    .ld-text { font-size: 16px; font-weight: 600; color: var(--blue-800); margin-bottom: 20px; }
+    .ld-bar { width: 160px; height: 4px; background: var(--blue-50); border-radius: 99px; overflow: hidden; margin: 0 auto; }
+    .ld-bar-fill { height: 100%; background: var(--blue-400); border-radius: 99px; animation: ldbar 1.5s ease-in-out infinite; }
+    @keyframes ldbar { 0%{width:0%;margin-left:0} 50%{width:70%;margin-left:0} 100%{width:0%;margin-left:100%} }
+    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
+
+    /* ===== HEADER ===== */
+    .header {
+      background: var(--card); border-bottom: 1px solid var(--border);
+      padding: 16px 20px 12px; position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .header-title { font-size: 18px; font-weight: 600; color: var(--blue-800); }
+    .header-sub { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+    /* ===== BOTTOM NAV ===== */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+      width: 100%; max-width: 430px; background: var(--card);
+      border-top: 1px solid var(--border); display: flex; z-index: 200;
+      padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+    }
+    .nav-btn {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      gap: 3px; padding: 6px 0; background: none; border: none; cursor: pointer;
+      color: var(--gray-400); transition: color var(--tr); font-size: 10px;
+    }
+    .nav-btn.active { color: var(--blue-600); }
+    .nav-btn svg { width: 22px; height: 22px; }
+
+    /* ===== CARDS ===== */
+    .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); margin: 12px 16px 0; padding: 18px; }
+    .card-sm { padding: 14px 16px; }
+    .section-title { font-size: 13px; font-weight: 600; color: var(--text-muted); letter-spacing: .04em; text-transform: uppercase; margin: 20px 20px 6px; }
+
+    /* ===== BUTTONS ===== */
+    .btn { border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; transition: all var(--tr); display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 20px; }
+    .btn-primary { background: var(--blue-600); color: #fff; }
+    .btn-primary:hover { background: var(--blue-800); }
+    .btn-primary:active { transform: scale(.97); }
+    .btn-ghost { background: var(--blue-50); color: var(--blue-600); }
+    .btn-ghost:hover { background: var(--blue-100); }
+    .btn-danger { background: var(--red-50); color: var(--red-800); }
+    .btn-full { width: 100%; padding: 14px; font-size: 16px; }
+
+    /* ===== INPUTS ===== */
+    .input-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .input-group label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+    input[type=text], input[type=number] {
+      border: 1.5px solid var(--border); border-radius: var(--radius-xs);
+      padding: 10px 12px; font-size: 15px; background: var(--bg); color: var(--text);
+      width: 100%; transition: border-color var(--tr); outline: none; font-family: inherit;
+    }
+    input:focus { border-color: var(--blue-400); background: #fff; }
+
+    /* ===== BOTTLE ===== */
+    .bottle-container { display: flex; flex-direction: column; align-items: center; padding: 8px 0 4px; }
+    .bottle-wrap { position: relative; width: 110px; height: 220px; cursor: pointer; }
+    .bottle-svg { width: 100%; height: 100%; filter: drop-shadow(0 4px 16px rgba(24,95,165,.15)); }
+    #water-fill { transition: y .7s cubic-bezier(.4,0,.2,1), height .7s cubic-bezier(.4,0,.2,1); }
+    .bottle-pct { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: 700; color: var(--blue-800); text-align: center; pointer-events: none; line-height: 1.1; white-space: nowrap; }
+    .bottle-pct-sub { display: block; font-size: 11px; font-weight: 500; color: var(--text-muted); }
+    .progress-bar-wrap { width: 100%; background: var(--blue-50); border-radius: 99px; height: 8px; margin: 10px 0 4px; overflow: hidden; }
+    .progress-bar { height: 100%; border-radius: 99px; transition: width .6s cubic-bezier(.4,0,.2,1), background .4s; }
+
+    /* ===== STATS ===== */
+    .stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .stat-box { background: var(--bg); border-radius: var(--radius-sm); padding: 10px 8px; text-align: center; }
+    .stat-val { font-size: 17px; font-weight: 700; color: var(--blue-800); }
+    .stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    /* ===== QUICK BUTTONS ===== */
+    .quick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+    .quick-btn { background: var(--blue-50); color: var(--blue-800); border: none; border-radius: var(--radius-xs); padding: 12px 4px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all var(--tr); text-align: center; }
+    .quick-btn:hover { background: var(--blue-100); }
+    .quick-btn:active { transform: scale(.95); }
+    .quick-btn small { display: block; font-size: 10px; font-weight: 400; color: var(--text-muted); margin-top: 2px; }
+    .add-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+    .add-row .input-group { flex: 1; margin-bottom: 0; }
+
+    /* ===== LOG LIST ===== */
+    .log-list { list-style: none; display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+    .log-empty { text-align: center; color: var(--text-muted); font-size: 13px; padding: 12px 0; }
+    .log-item { display: flex; align-items: center; justify-content: space-between; background: var(--blue-50); border-radius: var(--radius-xs); padding: 9px 12px; animation: slideIn .2s ease; }
+    .log-item-left { display: flex; align-items: center; gap: 10px; }
+    .log-item-icon { width: 28px; height: 28px; background: var(--blue-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .log-item-val { font-weight: 700; color: var(--blue-800); font-size: 15px; }
+    .log-item-time { font-size: 11px; color: var(--text-muted); }
+    .log-item-del { background: none; border: none; color: var(--gray-200); cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; transition: color var(--tr); }
+    .log-item-del:hover { color: var(--red-400); }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ===== ALL USERS TODAY ===== */
+    .user-today-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .user-today-item:last-child { border-bottom: none; }
+    .user-today-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--blue-100); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--blue-800); font-size: 13px; flex-shrink: 0; }
+    .user-today-info { flex: 1; min-width: 0; }
+    .user-today-name { font-weight: 600; font-size: 14px; }
+    .user-today-bar-wrap { height: 5px; background: var(--bg); border-radius: 99px; margin-top: 4px; overflow: hidden; }
+    .user-today-bar { height: 100%; border-radius: 99px; transition: width .5s; }
+    .user-today-pct { font-size: 13px; font-weight: 700; flex-shrink: 0; min-width: 36px; text-align: right; }
+
+    /* ===== CALENDAR ===== */
+    .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .cal-nav-btn { background: var(--blue-50); border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; color: var(--blue-600); transition: background var(--tr); line-height: 1; }
+    .cal-nav-btn:hover { background: var(--blue-100); }
+    .cal-month { font-size: 16px; font-weight: 700; color: var(--blue-800); }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .cal-day-name { text-align: center; font-size: 11px; font-weight: 600; color: var(--text-muted); padding: 4px 0; }
+    .cal-day { aspect-ratio: 1; border-radius: var(--radius-xs); display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; font-size: 13px; font-weight: 500; background: var(--bg); color: var(--text); }
+    .cal-day.empty { background: transparent; }
+    .cal-day.today { border: 2px solid var(--blue-400); }
+    .cal-day.goal-met { background: var(--teal-50); color: var(--teal-800); }
+    .cal-day.goal-met::after { content: ''; position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: var(--teal-400); }
+    .cal-day.partial { background: var(--amber-50); color: var(--amber-800); }
+    .cal-day.no-data { color: var(--gray-200); }
+    .cal-day-ml { font-size: 9px; color: var(--text-muted); line-height: 1; }
+    .cal-legend { margin-top: 12px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-muted); }
+    .legend-dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+    /* ===== SUMMARY ===== */
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .summary-box { background: var(--bg); border-radius: var(--radius-sm); padding: 12px; }
+    .summary-val { font-size: 20px; font-weight: 700; color: var(--blue-800); }
+    .summary-lbl { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+
+    /* ===== USERS ===== */
+    .user-list { list-style: none; display: flex; flex-direction: column; gap: 8px; padding: 0 16px; }
+    .user-item { background: var(--card); border-radius: var(--radius-sm); border: 1.5px solid transparent; padding: 14px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: all var(--tr); box-shadow: var(--shadow); }
+    .user-item:hover { border-color: var(--blue-200); }
+    .user-item.active-user { border-color: var(--blue-400); background: var(--blue-50); }
+    .user-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--blue-100); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--blue-800); font-size: 16px; flex-shrink: 0; }
+    .user-info { flex: 1; }
+    .user-name { font-weight: 600; font-size: 15px; }
+    .user-goal-text { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .user-del { background: none; border: none; color: var(--gray-200); cursor: pointer; font-size: 18px; padding: 4px; transition: color var(--tr); }
+    .user-del:hover { color: var(--red-400); }
+    .add-user-form { background: var(--card); border-radius: var(--radius); padding: 18px; margin: 12px 16px 0; box-shadow: var(--shadow); }
+
+    /* ===== SETTINGS ===== */
+    .settings-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .settings-item:last-child { border-bottom: none; }
+    .settings-lbl { font-size: 14px; font-weight: 500; }
+    .settings-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    /* ===== SYNC DOT ===== */
+    .sync-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--gray-200); transition: background .4s; flex-shrink: 0; }
+    .sync-dot.online { background: var(--teal-400); box-shadow: 0 0 0 3px rgba(29,158,117,.15); }
+    .sync-dot.offline { background: var(--red-400); }
+
+    /* ===== TOAST ===== */
+    #toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--blue-800); color: #fff; padding: 10px 20px; border-radius: 99px; font-size: 14px; font-weight: 600; opacity: 0; pointer-events: none; transition: all .35s cubic-bezier(.4,0,.2,1); z-index: 9999; white-space: nowrap; max-width: 90vw; text-align: center; }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.success { background: var(--teal-600); }
+
+    /* ===== CONFETTI ===== */
+    #confetti-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9998; }
+
+    /* ===== CELEBRATION ===== */
+    #celebrate-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.4); z-index: 9997; opacity: 0; pointer-events: none; transition: opacity .4s; }
+    #celebrate-overlay.show { opacity: 1; pointer-events: auto; }
+    .celebrate-card { background: var(--card); border-radius: var(--radius); padding: 32px 28px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.2); max-width: 300px; width: 90%; transform: scale(.8); transition: transform .4s cubic-bezier(.34,1.56,.64,1); }
+    #celebrate-overlay.show .celebrate-card { transform: scale(1); }
+    .celebrate-icon { font-size: 52px; line-height: 1; margin-bottom: 12px; }
+    .celebrate-title { font-size: 22px; font-weight: 700; color: var(--blue-800); margin-bottom: 6px; }
+    .celebrate-msg { color: var(--text-muted); font-size: 14px; margin-bottom: 20px; line-height: 1.6; }
+
+    /* ===== MISC ===== */
+    .chip { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+    .chip-blue { background: var(--blue-50); color: var(--blue-800); cursor: pointer; }
+    .motivational { background: var(--blue-50); border-radius: var(--radius-xs); padding: 12px 14px; margin-top: 10px; font-size: 13px; color: var(--blue-800); text-align: center; border-left: 3px solid var(--blue-400); }
+    .empty-state { text-align: center; padding: 32px 20px; color: var(--text-muted); font-size: 14px; }
+    .error-banner { background: var(--red-50); color: var(--red-800); border-radius: var(--radius-xs); padding: 10px 14px; font-size: 13px; margin: 8px 16px 0; display: none; }
+    .error-banner.show { display: block; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <canvas id="confetti-canvas"></canvas>
+
+  <!-- CELEBRATION -->
+  <div id="celebrate-overlay">
+    <div class="celebrate-card">
+      <div class="celebrate-icon">🎉</div>
+      <div class="celebrate-title">Meta atingida!</div>
+      <div class="celebrate-msg" id="celebrate-msg">Parabéns! Continue assim!</div>
+      <button class="btn btn-primary btn-full" onclick="closeCelebration()">Ótimo! 💧</button>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast"></div>
+
+  <!-- LOADING -->
+  <div id="loading-screen">
+    <div class="ld-inner">
+      <div class="ld-icon">💧</div>
+      <div class="ld-text">Carregando HydroTrack...</div>
+      <div class="ld-bar"><div class="ld-bar-fill"></div></div>
+    </div>
+  </div>
+
+  <!-- ======= HOME ======= -->
+  <div id="screen-home" class="screen active">
+    <div class="header">
+      <div>
+        <div class="header-title" id="home-greeting">Carregando...</div>
+        <div class="header-sub" id="home-date"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div id="sync-indicator" class="sync-dot" title="Status"></div>
+        <div id="home-user-chip" class="chip chip-blue" onclick="showScreen('users')">—</div>
+      </div>
+    </div>
+    <div id="error-banner" class="error-banner">⚠️ Erro de conexão com o Firebase. Verifique as regras do Firestore.</div>
+    <div class="scroll-area">
+      <div class="card" style="text-align:center">
+        <div class="bottle-container">
+          <div class="bottle-wrap" title="Toque para +200ml" onclick="addQuick(200)">
+            <svg class="bottle-svg" viewBox="0 0 110 220" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <clipPath id="bottle-clip">
+                  <path d="M38,16 L38,32 Q20,38 18,55 L14,190 Q13,206 28,210 L82,210 Q97,206 96,190 L92,55 Q90,38 72,32 L72,16 Z"/>
+                </clipPath>
+                <linearGradient id="water-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#85B7EB"/>
+                  <stop offset="100%" stop-color="#185FA5"/>
+                </linearGradient>
+              </defs>
+              <path d="M38,16 L38,32 Q20,38 18,55 L14,190 Q13,206 28,210 L82,210 Q97,206 96,190 L92,55 Q90,38 72,32 L72,16 Z" fill="#E6F1FB" stroke="#B5D4F4" stroke-width="2"/>
+              <rect x="36" y="8" width="38" height="12" rx="4" fill="#185FA5"/>
+              <rect id="water-fill" x="0" y="208" width="110" height="0" fill="url(#water-grad)" clip-path="url(#bottle-clip)" opacity=".85"/>
+              <g clip-path="url(#bottle-clip)"><path id="wave-path" d="" fill="white" opacity=".25"/></g>
+              <path d="M26,65 Q30,55 26,110" stroke="white" stroke-width="5" stroke-linecap="round" fill="none" opacity=".35"/>
+              <path d="M38,16 L38,32 Q20,38 18,55 L14,190 Q13,206 28,210 L82,210 Q97,206 96,190 L92,55 Q90,38 72,32 L72,16 Z" fill="none" stroke="#B5D4F4" stroke-width="2.5"/>
+            </svg>
+            <div class="bottle-pct">
+              <span id="bottle-pct-val">0%</span>
+              <span id="bottle-pct-sub" class="bottle-pct-sub">da meta</span>
+            </div>
+          </div>
+        </div>
+        <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar" style="width:0%;background:var(--red-400)"></div></div>
+        <div class="stats-row">
+          <div class="stat-box"><div class="stat-val" id="stat-consumed">0ml</div><div class="stat-lbl">Consumido</div></div>
+          <div class="stat-box"><div class="stat-val" id="stat-remaining">—</div><div class="stat-lbl">Restam</div></div>
+          <div class="stat-box"><div class="stat-val" id="stat-goal">2000ml</div><div class="stat-lbl">Meta</div></div>
+        </div>
+        <div class="motivational" id="motivational-msg">💧 Cada gole conta! Comece seu dia hidratado.</div>
+      </div>
+
+      <div class="section-title">Adicionar rápido</div>
+      <div class="card card-sm">
+        <div class="quick-grid">
+          <button class="quick-btn" onclick="addQuick(150)">🥛 150<small>ml</small></button>
+          <button class="quick-btn" onclick="addQuick(200)">🥤 200<small>ml</small></button>
+          <button class="quick-btn" onclick="addQuick(350)">🍶 350<small>ml</small></button>
+          <button class="quick-btn" onclick="addQuick(500)">🧴 500<small>ml</small></button>
+        </div>
+        <div class="add-row">
+          <div class="input-group"><label>Quantidade (ml)</label><input type="number" id="custom-ml" placeholder="ex: 300" min="1" max="5000" onkeydown="if(event.key==='Enter')addCustom()"></div>
+          <button class="btn btn-primary" style="height:42px;padding:0 16px;align-self:flex-end;white-space:nowrap" onclick="addCustom()">Adicionar</button>
+        </div>
+      </div>
+
+      <div class="section-title">Registros de hoje</div>
+      <div class="card card-sm"><ul class="log-list" id="log-list"><li class="log-empty">Nenhum registro ainda</li></ul></div>
+
+      <div class="section-title">Todos hoje 👥</div>
+      <div class="card card-sm"><div id="all-users-today"><p class="log-empty">Carregando...</p></div></div>
+      <div style="height:8px"></div>
+    </div>
+  </div>
+
+  <!-- ======= HISTORY ======= -->
+  <div id="screen-history" class="screen">
+    <div class="header">
+      <div><div class="header-title">Histórico</div><div class="header-sub" id="history-user-name">—</div></div>
+    </div>
+    <div class="scroll-area">
+      <div class="card">
+        <div class="cal-nav">
+          <button class="cal-nav-btn" onclick="calNav(-1)">‹</button>
+          <div class="cal-month" id="cal-month-label">—</div>
+          <button class="cal-nav-btn" onclick="calNav(1)">›</button>
+        </div>
+        <div class="cal-grid" id="cal-days-names"></div>
+        <div class="cal-grid" id="cal-grid" style="margin-top:4px"></div>
+        <div class="cal-legend">
+          <span class="legend-item"><span class="legend-dot" style="background:var(--teal-50);border:1.5px solid var(--teal-200)"></span>Meta atingida</span>
+          <span class="legend-item"><span class="legend-dot" style="background:var(--amber-50);border:1.5px solid var(--amber-400)"></span>Parcial</span>
+          <span class="legend-item"><span class="legend-dot" style="background:var(--bg);border:1.5px solid var(--border)"></span>Sem dados</span>
+        </div>
+      </div>
+      <div class="section-title" id="monthly-label">Resumo do Mês</div>
+      <div class="card">
+        <div class="summary-grid">
+          <div class="summary-box"><div class="summary-val" id="summary-total">0L</div><div class="summary-lbl">Total consumido</div></div>
+          <div class="summary-box"><div class="summary-val" id="summary-avg">0ml</div><div class="summary-lbl">Média diária</div></div>
+          <div class="summary-box"><div class="summary-val" id="summary-days-met">0</div><div class="summary-lbl">Dias com meta</div></div>
+          <div class="summary-box"><div class="summary-val" id="summary-streak">0</div><div class="summary-lbl">Sequência atual</div></div>
+        </div>
+      </div>
+      <div style="height:8px"></div>
+    </div>
+  </div>
+
+  <!-- ======= USERS ======= -->
+  <div id="screen-users" class="screen">
+    <div class="header"><div class="header-title">Usuários</div><div class="header-sub">Dados em tempo real</div></div>
+    <div class="scroll-area">
+      <div style="padding:12px 0"><ul class="user-list" id="user-list"><li class="log-empty">Carregando...</li></ul></div>
+      <div class="section-title">Novo usuário</div>
+      <div class="add-user-form">
+        <div class="input-group"><label>Nome</label><input type="text" id="new-user-name" placeholder="Seu nome" maxlength="30"></div>
+        <div class="input-group"><label>Meta diária (ml)</label><input type="number" id="new-user-goal" placeholder="ex: 2000" min="500" max="10000" value="2000"></div>
+        <button class="btn btn-primary btn-full" onclick="createUser()">Criar usuário</button>
+      </div>
+      <div style="height:8px"></div>
+    </div>
+  </div>
+
+  <!-- ======= SETTINGS ======= -->
+  <div id="screen-settings" class="screen">
+    <div class="header"><div class="header-title">Configurações</div></div>
+    <div class="scroll-area">
+      <div class="card">
+        <div class="settings-item">
+          <div><div class="settings-lbl">Meta diária</div><div class="settings-sub" id="current-goal-display">—</div></div>
+          <button class="btn btn-ghost" style="padding:8px 14px;font-size:13px" onclick="editGoal()">Editar</button>
+        </div>
+        <div class="settings-item">
+          <div><div class="settings-lbl">Usuário ativo</div><div class="settings-sub" id="settings-user-name">—</div></div>
+          <button class="btn btn-ghost" style="padding:8px 14px;font-size:13px" onclick="showScreen('users')">Trocar</button>
+        </div>
+        <div class="settings-item">
+          <div><div class="settings-lbl">Resetar consumo de hoje</div><div class="settings-sub">Apaga registros do dia atual</div></div>
+          <button class="btn btn-danger" style="padding:8px 14px;font-size:13px" onclick="resetToday()">Resetar</button>
+        </div>
+      </div>
+      <div class="section-title">Firebase</div>
+      <div class="card">
+        <div class="settings-item">
+          <div><div class="settings-lbl">Status</div><div class="settings-sub" id="firebase-status-text">Verificando...</div></div>
+          <div id="firebase-status-dot" class="sync-dot"></div>
+        </div>
+        <div class="settings-item">
+          <div><div class="settings-lbl">Projeto</div><div class="settings-sub">saudee-bem-estar-controladoria</div></div>
+        </div>
+      </div>
+      <div class="section-title">Sobre</div>
+      <div class="card">
+        <p style="font-size:14px;color:var(--text-muted);line-height:1.7">
+          <strong style="color:var(--blue-800)">HydroTrack</strong> — Controle de hidratação coletivo.<br>
+          Dados sincronizados em tempo real. Todos que acessarem este link compartilham os mesmos dados.
+        </p>
+      </div>
+      <div style="height:8px"></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" id="nav-home" onclick="showScreen('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>Início
+    </button>
+    <button class="nav-btn" id="nav-history" onclick="showScreen('history')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Histórico
+    </button>
+    <button class="nav-btn" id="nav-users" onclick="showScreen('users')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Usuários
+    </button>
+    <button class="nav-btn" id="nav-settings" onclick="showScreen('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Config
+    </button>
+  </nav>
+</div>
+
+<!-- Firebase SDK (compat — funciona com HTML puro, sem build tools) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+<script>
+/* ================================================
+   FIREBASE CONFIG
+   ================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyAmIJ_EilJ-7KFZ_65I721h36Nx5dsS4f0",
+  authDomain: "saudee-bem-estar-controladoria.firebaseapp.com",
+  projectId: "saudee-bem-estar-controladoria",
+  storageBucket: "saudee-bem-estar-controladoria.firebasestorage.app",
+  messagingSenderId: "939409410249",
+  appId: "1:939409410249:web:a73d16ee60142d6c096518"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// Persistência offline
+db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+
+/* ================================================
+   STATE
+   ================================================ */
+const S = {
+  uid: localStorage.getItem('ht_uid') || null,
+  users: {},
+  todayData: { logs: [], total: 0 },
+  allToday: {},
+  calY: new Date().getFullYear(),
+  calM: new Date().getMonth(),
+  celebrated: false,
+  unsubDay: null,
+  unsubAll: null
+};
+
+/* ================================================
+   HELPERS
+   ================================================ */
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+function pad(n) { return String(n).padStart(2,'0'); }
+function fml(ml) {
+  if (!ml) return '0ml';
+  return ml >= 1000 ? (ml/1000).toFixed(1).replace('.0','')+'L' : ml+'ml';
+}
+function initials(name) { return (name||'?').trim().substring(0,2).toUpperCase(); }
+
+/* ================================================
+   NAVIGATION
+   ================================================ */
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  const nb = document.getElementById('nav-'+name);
+  if (nb) nb.classList.add('active');
+  if (name === 'history') renderCalendar();
+  if (name === 'settings') renderSettings();
+  if (name === 'users') renderUserList();
+}
+
+/* ================================================
+   TOAST
+   ================================================ */
+let _tt;
+function toast(msg, ok) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (ok ? ' success' : '');
+  clearTimeout(_tt);
+  _tt = setTimeout(() => el.className = '', 2600);
+}
+
+/* ================================================
+   LOADING
+   ================================================ */
+function hideLoading() {
+  const el = document.getElementById('loading-screen');
+  el.classList.add('hidden');
+  setTimeout(() => el.style.display = 'none', 450);
+}
+
+/* ================================================
+   SYNC STATUS
+   ================================================ */
+function setSyncStatus(ok) {
+  document.querySelectorAll('.sync-dot').forEach(d => {
+    d.className = 'sync-dot ' + (ok ? 'online' : 'offline');
+  });
+  const t = document.getElementById('firebase-status-text');
+  if (t) t.textContent = ok ? 'Conectado ✓' : 'Offline (sincroniza ao reconectar)';
+}
+
+/* ================================================
+   FIRESTORE — USERS
+   ================================================ */
+function listenUsers() {
+  db.collection('users').orderBy('createdAt','asc').onSnapshot(snap => {
+    const users = {};
+    snap.forEach(d => { users[d.id] = { id: d.id, ...d.data() }; });
+    S.users = users;
+    setSyncStatus(true);
+    hideLoading();
+
+    // Auto-seleciona usuário se necessário
+    if (!S.uid || !users[S.uid]) {
+      const ids = Object.keys(users);
+      if (ids.length) { S.uid = ids[0]; localStorage.setItem('ht_uid', ids[0]); }
+      else { S.uid = null; localStorage.removeItem('ht_uid'); }
+    }
+
+    listenDay();
+    renderUserList();
+    renderHomeHeader();
+    renderSettings();
+    renderAllToday();
+  }, err => {
+    console.error('Firestore error:', err);
+    setSyncStatus(false);
+    showError(err.message);
+    hideLoading();
+  });
+}
+
+async function createUser() {
+  const name = document.getElementById('new-user-name').value.trim();
+  const goal = parseInt(document.getElementById('new-user-goal').value) || 2000;
+  if (!name) { toast('Digite um nome'); return; }
+  try {
+    const ref = await db.collection('users').add({ name, goal, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    document.getElementById('new-user-name').value = '';
+    document.getElementById('new-user-goal').value = '2000';
+    selectUser(ref.id);
+    toast('Usuário criado! 👤', true);
+  } catch(e) { toast('Erro: ' + e.message); }
+}
+
+function selectUser(id, silent) {
+  S.uid = id; S.celebrated = false;
+  localStorage.setItem('ht_uid', id);
+  listenDay();
+  renderUserList();
+  renderHomeHeader();
+  renderSettings();
+  if (!silent) toast('Usuário selecionado ✓', true);
+}
+
+async function deleteUser(id) {
+  if (!confirm('Excluir este usuário e todos os dados?')) return;
+  try {
+    const days = await db.collection('users').doc(id).collection('days').get();
+    const b = db.batch();
+    days.forEach(d => b.delete(d.ref));
+    b.delete(db.collection('users').doc(id));
+    await b.commit();
+    if (S.uid === id) { S.uid = null; localStorage.removeItem('ht_uid'); }
+    toast('Usuário excluído');
+  } catch(e) { toast('Erro: ' + e.message); }
+}
+
+function renderUserList() {
+  const ul = document.getElementById('user-list');
+  const users = Object.values(S.users);
+  if (!users.length) {
+    ul.innerHTML = '<li class="log-empty">Nenhum usuário. Crie um abaixo!</li>';
+    return;
+  }
+  ul.innerHTML = users.map(u => {
+    const isMe = u.id === S.uid;
+    const total = S.allToday[u.id]?.total || 0;
+    const pct = Math.min(100, Math.round(total / u.goal * 100));
+    return `<li class="user-item ${isMe ? 'active-user' : ''}" onclick="selectUser('${u.id}')">
+      <div class="user-avatar">${initials(u.name)}</div>
+      <div class="user-info">
+        <div class="user-name">${u.name}${isMe ? ' <span class="chip chip-blue" style="font-size:10px;cursor:default">Ativo</span>' : ''}</div>
+        <div class="user-goal-text">Meta: ${fml(u.goal)} · Hoje: ${fml(total)} (${pct}%)</div>
+      </div>
+      <button class="user-del" onclick="event.stopPropagation();deleteUser('${u.id}')" title="Excluir">✕</button>
+    </li>`;
+  }).join('');
+}
+
+/* ================================================
+   FIRESTORE — DAY
+   ================================================ */
+function listenDay() {
+  if (S.unsubDay) { S.unsubDay(); S.unsubDay = null; }
+  if (!S.uid) { S.todayData = { logs: [], total: 0 }; renderHome(); return; }
+  const ref = db.collection('users').doc(S.uid).collection('days').doc(todayKey());
+  S.unsubDay = ref.onSnapshot(doc => {
+    S.todayData = doc.exists ? doc.data() : { logs: [], total: 0 };
+    renderHome();
+  });
+}
+
+function listenAllToday() {
+  if (S.unsubAll) S.unsubAll();
+  S.unsubAll = db.collectionGroup('days')
+    .where('date', '==', todayKey())
+    .onSnapshot(snap => {
+      const res = {};
+      snap.forEach(d => { res[d.ref.parent.parent.id] = d.data(); });
+      S.allToday = res;
+      renderAllToday();
+      renderUserList();
+    }, err => {
+      // Se falhar (índice não criado), tenta fallback silencioso
+      console.warn('collectionGroup error (índice pendente?):', err.message);
+    });
+}
+
+/* ================================================
+   ADD / REMOVE
+   ================================================ */
+function addQuick(ml) { addMl(ml); }
+
+function addCustom() {
+  const v = parseInt(document.getElementById('custom-ml').value);
+  if (!v || v < 1) { toast('Digite uma quantidade'); return; }
+  if (v > 5000) { toast('Máximo 5000ml por vez'); return; }
+  addMl(v);
+  document.getElementById('custom-ml').value = '';
+}
+
+async function addMl(ml) {
+  if (!S.uid) { toast('Selecione um usuário primeiro'); showScreen('users'); return; }
+  const ref = db.collection('users').doc(S.uid).collection('days').doc(todayKey());
+  const log = { ml, time: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), id: Date.now() };
+  try {
+    await db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) {
+        tx.set(ref, { logs: [log], total: ml, date: todayKey() });
+      } else {
+        const data = doc.data();
+        tx.update(ref, { logs: [...(data.logs||[]), log], total: (data.total||0) + ml });
+      }
+    });
+    toast('+' + ml + 'ml 💧');
+  } catch(e) { toast('Erro: ' + e.message); }
+}
+
+async function removeLog(logId) {
+  if (!S.uid) return;
+  const ref = db.collection('users').doc(S.uid).collection('days').doc(todayKey());
+  try {
+    await db.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists) return;
+      const data = doc.data();
+      const log = (data.logs||[]).find(l => l.id === logId);
+      if (!log) return;
+      tx.update(ref, { logs: data.logs.filter(l => l.id !== logId), total: Math.max(0, (data.total||0) - log.ml) });
+    });
+  } catch(e) { toast('Erro ao remover'); }
+}
+
+/* ================================================
+   RENDER HOME
+   ================================================ */
+function renderHomeHeader() {
+  const h = new Date().getHours();
+  document.getElementById('home-greeting').textContent = h < 12 ? 'Bom dia! 👋' : h < 18 ? 'Boa tarde! 👋' : 'Boa noite! 👋';
+  const ds = new Date().toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' });
+  document.getElementById('home-date').textContent = ds.charAt(0).toUpperCase() + ds.slice(1);
+  const u = S.users[S.uid];
+  document.getElementById('home-user-chip').textContent = u ? u.name : 'Sem usuário';
+}
+
+function renderHome() {
+  const u = S.users[S.uid];
+  const total = S.todayData?.total || 0;
+  const goal = u?.goal || 2000;
+  const pct = Math.min(100, Math.round(total / goal * 100));
+  const rem = Math.max(0, goal - total);
+
+  document.getElementById('stat-consumed').textContent = fml(total);
+  document.getElementById('stat-remaining').textContent = rem > 0 ? fml(rem) : '🎯 Meta!';
+  document.getElementById('stat-goal').textContent = fml(goal);
+  setBottle(pct);
+  renderLogs(S.todayData?.logs || []);
+  renderMotivational(pct);
+
+  if (u && total >= goal && !S.celebrated) {
+    S.celebrated = true;
+    setTimeout(() => celebrate(u.name), 500);
+  }
+  if (total < goal) S.celebrated = false;
+}
+
+function setBottle(pct) {
+  const maxH = 176, minY = 32;
+  const fh = Math.round(maxH * pct / 100);
+  const fy = minY + (maxH - fh);
+  const fill = document.getElementById('water-fill');
+  fill.setAttribute('y', fy);
+  fill.setAttribute('height', fh + 8);
+  const wp = document.getElementById('wave-path');
+  wp.setAttribute('d', pct > 2 && pct < 98 ? `M14,${fy} Q35,${fy-6} 55,${fy} Q75,${fy+6} 96,${fy} L96,${fy+10} L14,${fy+10} Z` : '');
+  document.getElementById('bottle-pct-val').textContent = pct + '%';
+  document.getElementById('bottle-pct-sub').textContent = pct >= 100 ? '🎉 Meta!' : 'da meta';
+  const bar = document.getElementById('progress-bar');
+  bar.style.width = pct + '%';
+  bar.style.background = pct < 33 ? 'var(--red-400)' : pct < 66 ? 'var(--amber-400)' : pct < 100 ? 'var(--blue-400)' : 'var(--teal-400)';
+}
+
+function renderMotivational(pct) {
+  const msgs = [[0,'💧 Comece agora! Seu corpo precisa de água.'],[10,'🌱 Ótimo começo! Continue bebendo.'],[25,'🚀 25%! Um quarto do caminho!'],[50,'🌊 Metade da meta! Indo muito bem!'],[75,'🔥 75%! Só um pouco mais!'],[90,'⚡ Quase lá! Falta pouquíssimo!'],[100,'🎉 Meta atingida! Seu corpo agradece!']];
+  let m = msgs[0][1];
+  for (const [t,msg] of msgs) if (pct >= t) m = msg;
+  document.getElementById('motivational-msg').textContent = m;
+}
+
+function renderLogs(logs) {
+  const ul = document.getElementById('log-list');
+  if (!logs.length) { ul.innerHTML = '<li class="log-empty">Nenhum registro ainda</li>'; return; }
+  ul.innerHTML = [...logs].reverse().map(l =>
+    `<li class="log-item">
+      <div class="log-item-left">
+        <div class="log-item-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue-600)" stroke-width="2.5" stroke-linecap="round"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg></div>
+        <div><div class="log-item-val">${l.ml}ml</div><div class="log-item-time">${l.time}</div></div>
+      </div>
+      <button class="log-item-del" onclick="removeLog(${l.id})">✕</button>
+    </li>`
+  ).join('');
+}
+
+function renderAllToday() {
+  const el = document.getElementById('all-users-today');
+  const users = Object.values(S.users);
+  if (!users.length) { el.innerHTML = '<p class="log-empty">Nenhum usuário cadastrado</p>'; return; }
+  el.innerHTML = users.map(u => {
+    const total = S.allToday[u.id]?.total || 0;
+    const pct = Math.min(100, Math.round(total / u.goal * 100));
+    const color = pct < 33 ? 'var(--red-400)' : pct < 66 ? 'var(--amber-400)' : pct < 100 ? 'var(--blue-400)' : 'var(--teal-400)';
+    const isMe = u.id === S.uid;
+    return `<div class="user-today-item">
+      <div class="user-today-avatar" style="${isMe?'background:var(--blue-200)':''}">${initials(u.name)}</div>
+      <div class="user-today-info">
+        <div class="user-today-name">${u.name}${isMe?' <small style="color:var(--blue-600)">(você)</small>':''}</div>
+        <div class="user-today-bar-wrap"><div class="user-today-bar" style="width:${pct}%;background:${color}"></div></div>
+      </div>
+      <div class="user-today-pct" style="color:${color}">${pct}%</div>
+    </div>`;
+  }).join('');
+}
+
+/* ================================================
+   CALENDAR
+   ================================================ */
+async function renderCalendar() {
+  const y = S.calY, m = S.calM;
+  const months = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  document.getElementById('cal-month-label').textContent = months[m] + ' ' + y;
+  document.getElementById('monthly-label').textContent = 'Resumo — ' + months[m];
+  document.getElementById('history-user-name').textContent = S.users[S.uid]?.name || '—';
+  document.getElementById('cal-days-names').innerHTML = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d=>`<div class="cal-day-name">${d}</div>`).join('');
+
+  const u = S.users[S.uid];
+  const goal = u?.goal || 2000;
+  const today = todayKey();
+  const prefix = `${y}-${pad(m+1)}`;
+  let hist = {};
+  if (S.uid) {
+    try {
+      const snap = await db.collection('users').doc(S.uid).collection('days').where('date','>=',prefix+'-01').where('date','<=',prefix+'-31').get();
+      snap.forEach(d => { hist[d.id] = d.data(); });
+    } catch(e) { console.error(e); }
+  }
+
+  const firstDay = new Date(y,m,1).getDay();
+  const days = new Date(y,m+1,0).getDate();
+  let grid = '', total = 0, active = 0, met = 0;
+  for (let i = 0; i < firstDay; i++) grid += '<div class="cal-day empty"></div>';
+  for (let d = 1; d <= days; d++) {
+    const key = `${y}-${pad(m+1)}-${pad(d)}`;
+    const dd = hist[key]; const t = dd?.total || 0;
+    if (t > 0) { total += t; active++; }
+    if (t >= goal) met++;
+    let cls = 'cal-day';
+    if (key === today) cls += ' today';
+    if (t >= goal) cls += ' goal-met';
+    else if (t > 0) cls += ' partial';
+    else if (key > today) cls += ' no-data';
+    grid += `<div class="${cls}" title="${key}: ${fml(t)}">${d}${t>0?`<div class="cal-day-ml">${fml(t)}</div>`:''}</div>`;
+  }
+  document.getElementById('cal-grid').innerHTML = grid;
+
+  const avg = active ? Math.round(total/active) : 0;
+  document.getElementById('summary-total').textContent = (total/1000).toFixed(1)+'L';
+  document.getElementById('summary-avg').textContent = fml(avg);
+  document.getElementById('summary-days-met').textContent = met+' dias';
+
+  // Sequência
+  let streak = 0;
+  for (let i = 0; i < 365; i++) {
+    const d2 = new Date(); d2.setDate(d2.getDate()-i);
+    const k = `${d2.getFullYear()}-${pad(d2.getMonth()+1)}-${pad(d2.getDate())}`;
+    if (hist[k]?.total >= goal) streak++; else if (i>0) break;
+  }
+  document.getElementById('summary-streak').textContent = streak+' dias';
+}
+
+function calNav(dir) {
+  S.calM += dir;
+  if (S.calM > 11) { S.calM = 0; S.calY++; }
+  if (S.calM < 0) { S.calM = 11; S.calY--; }
+  renderCalendar();
+}
+
+/* ================================================
+   SETTINGS
+   ================================================ */
+function renderSettings() {
+  const u = S.users[S.uid];
+  document.getElementById('settings-user-name').textContent = u?.name || 'Nenhum';
+  document.getElementById('current-goal-display').textContent = u ? fml(u.goal)+' por dia' : '—';
+}
+
+async function editGoal() {
+  if (!S.uid) { toast('Selecione um usuário'); return; }
+  const u = S.users[S.uid];
+  const v = prompt('Meta atual: '+u.goal+'ml\nDigite a nova meta em ml:', u.goal);
+  if (!v) return;
+  const g = parseInt(v);
+  if (!g || g < 100) { toast('Meta inválida'); return; }
+  try { await db.collection('users').doc(S.uid).update({ goal: g }); toast('Meta atualizada! 🎯', true); }
+  catch(e) { toast('Erro: '+e.message); }
+}
+
+async function resetToday() {
+  if (!S.uid || !confirm('Zerar registros de hoje?')) return;
+  try {
+    await db.collection('users').doc(S.uid).collection('days').doc(todayKey()).set({ logs:[], total:0, date:todayKey() });
+    S.celebrated = false; toast('Consumo zerado');
+  } catch(e) { toast('Erro: '+e.message); }
+}
+
+/* ================================================
+   CELEBRATION
+   ================================================ */
+function celebrate(name) {
+  document.getElementById('celebrate-msg').textContent = `Parabéns, ${name}! Você manteve a hidratação em dia hoje. Continue assim! 💪`;
+  document.getElementById('celebrate-overlay').classList.add('show');
+  startConfetti(); setTimeout(stopConfetti, 4500);
+}
+function closeCelebration() { document.getElementById('celebrate-overlay').classList.remove('show'); stopConfetti(); }
+
+let _confettiOn = false;
+function startConfetti() {
+  const cv = document.getElementById('confetti-canvas');
+  const ctx = cv.getContext('2d');
+  cv.width = window.innerWidth; cv.height = window.innerHeight;
+  _confettiOn = true;
+  const P = Array.from({length:90}, () => ({
+    x: Math.random()*cv.width, y:-20, vx:(Math.random()-.5)*3, vy:Math.random()*3+2,
+    c:['#378ADD','#1D9E75','#BA7517','#D4537E','#7F77DD'][0|Math.random()*5],
+    s:Math.random()*6+4, r:Math.random()*360, rv:(Math.random()-.5)*6,
+    circle:Math.random()>.5
+  }));
+  (function frame() {
+    if (!_confettiOn) { ctx.clearRect(0,0,cv.width,cv.height); return; }
+    ctx.clearRect(0,0,cv.width,cv.height);
+    for (let i=P.length-1;i>=0;i--) {
+      const p=P[i]; p.x+=p.vx; p.y+=p.vy; p.r+=p.rv;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.r*Math.PI/180); ctx.fillStyle=p.c;
+      if (p.circle) { ctx.beginPath(); ctx.arc(0,0,p.s/2,0,Math.PI*2); ctx.fill(); }
+      else ctx.fillRect(-p.s/2,-p.s/2,p.s,p.s*.6);
+      ctx.restore();
+      if (p.y > cv.height+20) P.splice(i,1);
+    }
+    if (P.length) requestAnimationFrame(frame);
+    else ctx.clearRect(0,0,cv.width,cv.height);
+  })();
+}
+function stopConfetti() { _confettiOn = false; }
+
+/* ================================================
+   ERROR BANNER
+   ================================================ */
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.textContent = '⚠️ Erro Firebase: ' + msg;
+  el.classList.add('show');
+}
+
+/* ================================================
+   INIT
+   ================================================ */
+window.addEventListener('online', () => setSyncStatus(true));
+window.addEventListener('offline', () => setSyncStatus(false));
+setSyncStatus(navigator.onLine);
+renderHomeHeader();
+listenUsers();
+listenAllToday();
+</script>
+</body>
+</html>
